@@ -60,19 +60,22 @@ for module in $(modules); do
 
     # Skip modules with no history in this range — an unreleased module should
     # not appear in notes with an empty section.
-    mapfile -t commits < <(git log --no-merges --format='%s' "${range}" -- "${module}" || true)
-    [[ ${#commits[@]} -gt 0 ]] || continue
+    # Newline-delimited rather than an array: macOS ships bash 3.2, which has
+    # no mapfile, and this script must run locally as well as on the runner.
+    commits="$(git log --no-merges --format='%s' "${range}" -- "${module}" || true)"
+    [[ -n "${commits}" ]] || continue
 
     body=""
     for section in Fixed Added Changed Performance Documentation Other; do
         lines=""
-        for subject in "${commits[@]}"; do
+        while IFS= read -r subject; do
+            [[ -n "${subject}" ]] || continue
             type="${subject%%[(:]*}"
             [[ "$(section_for "${type}")" == "${section}" ]] || continue
             # Strip the `type(scope):` prefix; keep the human half.
             text="${subject#*: }"
             lines+="- ${text}"$'\n'
-        done
+        done <<< "${commits}"
         [[ -n "${lines}" ]] || continue
         body+="#### ${section}"$'\n'"${lines}"$'\n'
     done

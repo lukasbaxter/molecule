@@ -1,0 +1,24 @@
+# Molecule Core — bootstrap configuration
+#
+# This file holds ONLY what Molecule needs before it can reach its database.
+# Everything else lives in MariaDB and is edited through the web panel; see
+# docs/SPEC.md section 4. Editing live settings here will not change them.
+
+database:
+  host: 127.0.0.1
+  port: 3306
+  name: molecule
+  username: molecule
+  password: ""
+
+  # Encrypts the connection (MariaDB sslMode=trust). For certificate
+  # verification set sslMode explicitly under `properties` below.
+  ssl: false
+
+  # Shared by every Molecule plugin on this server — they do not open their own.
+  pool-size: 10
+  connection-timeout-seconds: 10
+
+  # Extra JDBC properties, passed through verbatim. Applied last, so these
+  # override anything Molecule derives.
+  properties: {}

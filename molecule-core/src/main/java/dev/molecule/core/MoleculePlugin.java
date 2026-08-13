@@ -1,16 +1,24 @@
 package dev.molecule.core;
 
+import dev.molecule.api.database.DatabaseService;
 import dev.molecule.api.position.PositionService;
 import dev.molecule.api.scheduler.MoleculeScheduler;
+import dev.molecule.core.database.CoreSchema;
+import dev.molecule.core.database.DatabaseSettings;
+import dev.molecule.core.database.DatabaseSettingsLoader;
+import dev.molecule.core.database.HikariDatabaseService;
+import dev.molecule.core.database.migration.MigrationRunner;
 import dev.molecule.core.position.PositionListener;
 import dev.molecule.core.position.PositionTracker;
 import dev.molecule.core.scheduler.FoliaScheduler;
 import io.papermc.paper.threadedregions.RegionizedServerInitEvent;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.logging.Level;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -37,9 +45,15 @@ public final class MoleculePlugin extends JavaPlugin implements Listener {
     private ExecutorService offThreadPool;
     private FoliaScheduler scheduler;
     private PositionTracker positions;
+    private HikariDatabaseService database;
+
+    /** Completes once the schema is migrated and the pool is usable, or fails if it is not. */
+    private final CompletableFuture<Void> databaseReady = new CompletableFuture<>();
 
     @Override
     public void onEnable() {
+        saveDefaultConfig();
+
         offThreadPool = Executors.newFixedThreadPool(workerCount(), workerFactory());
         scheduler = new FoliaScheduler(this, offThreadPool);
         positions = new PositionTracker();
@@ -61,7 +75,38 @@ public final class MoleculePlugin extends JavaPlugin implements Listener {
     @EventHandler
     public void onServerInit(RegionizedServerInitEvent event) {
         seedPositions();
-        getLogger().info("Molecule Core ready.");
+        connectDatabase();
+    }
+
+    /**
+     * Opens the pool and migrates the schema, off-thread.
+     *
+     * <p>Connecting and migrating both block, so neither may happen on a server thread.
+     * Failure disables Core rather than leaving the ecosystem half-started against a
+     * schema nobody has verified — plugins that depend on Core would otherwise fail one
+     * confusing query at a time.
+     */
+    private void connectDatabase() {
+        scheduler.runOffThread(
+                () -> {
+                    try {
+                        DatabaseSettings settings =
+                                DatabaseSettingsLoader.load(getConfig().getConfigurationSection("database"));
+                        getLogger().info("Connecting to " + settings.redacted().jdbcUrl());
+
+                        database = new HikariDatabaseService(settings, offThreadPool);
+                        new MigrationRunner(database.dataSource(), getLogger())
+                                .migrate(CoreSchema.NAMESPACE, CoreSchema.migrations());
+
+                        databaseReady.complete(null);
+                        getLogger().info("Molecule Core ready.");
+                    } catch (RuntimeException e) {
+                        databaseReady.completeExceptionally(e);
+                        getLogger().log(Level.SEVERE, "Molecule Core could not start", e);
+                        // Disabling touches the plugin manager, which is server state.
+                        scheduler.runGlobal(() -> getServer().getPluginManager().disablePlugin(this));
+                    }
+                });
     }
 
     @Override
@@ -74,10 +119,37 @@ public final class MoleculePlugin extends JavaPlugin implements Listener {
         if (positions != null) {
             positions.clear();
         }
+        // Drain the pool before closing the datasource, so in-flight queries finish
+        // against a live connection rather than a closed one.
         if (offThreadPool != null) {
             shutdownPool();
         }
+        if (database != null) {
+            database.close();
+        }
         getLogger().info("Molecule Core disabled.");
+    }
+
+    /**
+     * Returns the database service (SPEC §5).
+     *
+     * @return the service, or {@code null} until {@link #whenDatabaseReady()} completes
+     */
+    public DatabaseService database() {
+        return database;
+    }
+
+    /**
+     * Signals when the database is migrated and usable.
+     *
+     * <p>Other Molecule plugins should wait on this before their first query rather than
+     * assuming Core finished first — Core connects off-thread, so enable order does not
+     * guarantee readiness.
+     *
+     * @return a future completing on success, or failing if startup failed
+     */
+    public CompletableFuture<Void> whenDatabaseReady() {
+        return databaseReady.copy();
     }
 
     /**

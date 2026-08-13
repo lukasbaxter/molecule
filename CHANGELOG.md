@@ -14,6 +14,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `TaskResult`, `RetryPolicy`), `PositionSnapshot` and `PositionService`, per SPEC §1A.
 - `molecule-core`: Folia bootstrap, `FoliaScheduler`, and the position snapshot
   service — the Phase 1 prerequisites everything else depends on.
+- `molecule-api`: `DatabaseService`, `DatabaseNamespace`, `Migration` — the database
+  contracts plugins consume, per SPEC §5.
+- `molecule-core`: connection pool, bootstrap config, and a versioned migration
+  engine with integration tests against a real MariaDB.
 - Release pipeline with per-module note generation.
 
 Nothing has been released yet. `molecule-api` and `molecule-core` now produce real

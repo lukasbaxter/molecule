@@ -5,15 +5,21 @@ plugins {
 description = "Molecule Core — shared infrastructure for the Molecule ecosystem"
 
 dependencies {
+    // Shipped inside Core's jar: the API must be on the server at runtime, and Core
+    // is what puts it there. Other plugins depend on it `compileOnly`.
     api(project(":molecule-api"))
+}
+
+tasks.processResources {
+    val pluginVersion = version.toString()
+    inputs.property("version", pluginVersion)
+    filesMatching("plugin.yml") {
+        expand("version" to pluginVersion)
+    }
 }
 
 tasks.shadowJar {
     archiveClassifier.set("")
-    // SPEC §5 — Core owns the only database pool in the ecosystem, so it is the
-    // only module that bundles third-party libraries. Relocate to avoid clashing
-    // with whatever else the server has loaded.
-    relocate("com.zaxxer.hikari", "dev.molecule.core.libs.hikari")
     mergeServiceFiles()
 }
 

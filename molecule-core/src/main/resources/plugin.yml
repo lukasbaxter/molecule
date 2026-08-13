@@ -1,0 +1,9 @@
+name: MoleculeCore
+version: '${version}'
+main: dev.molecule.core.MoleculePlugin
+api-version: '1.21'
+folia-supported: true
+description: Shared infrastructure for the Molecule plugin ecosystem.
+website: https://github.com/lukasbaxter/molecule
+authors:
+  - lukasbaxter

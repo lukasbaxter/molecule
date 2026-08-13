@@ -30,13 +30,26 @@ Implemented:
   lock prevents two servers migrating at once.
 - Bootstrap `config.yml` holding only what is needed to reach the database. Live
   configuration belongs in MariaDB (SPEC §4).
+- `config.DatabaseConfigService` — live configuration (SPEC §59, §60). Reads answer
+  from an in-memory cache, so gameplay code can read a setting on a region thread
+  every tick; writes persist before the cache moves, so a watcher never sees a value
+  that failed to save. Constraints are enforced on write *and* on read, so a
+  hand-edited database row degrades one setting rather than poisoning it.
+- `audit.DatabaseAuditService` — append-only history (SPEC §6). Insert and select
+  only; there is deliberately no update or delete path. Undo applies the previous
+  value as a new change pointing at the revision it reverses.
 
-Not yet started: configuration system, audit log, action and variable registries,
-player profile, HTTP server, REST/WebSocket API, authentication, web panel,
-resource-pack architecture.
+**Known limitation:** changes made by this server propagate immediately, but changes
+made directly in the database or by another server sharing it are only picked up on
+`reload()`. Molecule does not yet poll or subscribe for external changes. Stated
+rather than hidden, per SPEC §60's rule against faking live support.
+
+Not yet started: action and variable registries, player profile, HTTP server,
+REST/WebSocket API, authentication, web panel, resource-pack architecture.
 
 ## Tests
 
-Planner decisions are pure logic and unit-tested exhaustively. The runner is
-verified against a real MariaDB via Testcontainers (`MigrationRunnerIT`), which
-skips itself where Docker is unavailable — CI has Docker, so it runs there.
+Pure logic — the migration planner, config keys and codecs — is unit-tested
+exhaustively. Anything involving persistence is verified against a real MariaDB via
+Testcontainers (`MigrationRunnerIT`, `ConfigAuditIT`), which skips itself where
+Docker is unavailable; CI has Docker, so it runs there.

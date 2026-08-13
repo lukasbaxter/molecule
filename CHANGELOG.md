@@ -18,6 +18,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   contracts plugins consume, per SPEC §5.
 - `molecule-core`: connection pool, bootstrap config, and a versioned migration
   engine with integration tests against a real MariaDB.
+- `molecule-api`: `ConfigKey`, `ConfigService`, `AuditService` and supporting types.
+- `molecule-core`: live MariaDB-backed configuration with non-blocking reads, and an
+  append-only audit log with undo, per SPEC §6 and §59.
 - Release pipeline with per-module note generation.
 
 Nothing has been released yet. `molecule-api` and `molecule-core` now produce real

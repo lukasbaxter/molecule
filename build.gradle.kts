@@ -38,7 +38,10 @@ subprojects {
     tasks.withType<Test>().configureEach {
         useJUnitPlatform()
         testLogging {
-            events("failed", "skipped")
+            // "passed" included deliberately: several suites skip themselves when a
+            // precondition is missing (Docker, for instance), and a silent skip reads
+            // exactly like a pass in CI unless the counts are visible.
+            events("passed", "failed", "skipped")
             exceptionFormat = TestExceptionFormat.FULL
         }
     }

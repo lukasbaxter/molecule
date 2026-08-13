@@ -230,9 +230,9 @@ public final class MigrationRunner {
     private void releaseLock(Connection connection, String lockName) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("SELECT RELEASE_LOCK(?)")) {
             statement.setString(1, lockName);
-            try (ResultSet ignored = statement.executeQuery()) {
-                // The result is irrelevant; the call is what releases the lock.
-            }
+            // The returned value is irrelevant — issuing the call is what releases the
+            // lock, and closing the statement discards its result set.
+            statement.execute();
         }
     }
 

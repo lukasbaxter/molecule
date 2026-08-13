@@ -21,6 +21,9 @@ subprojects {
 
     dependencies {
         "compileOnly"(rootProject.libs.folia.api)
+        // Tests exercise the text engine, which needs Adventure/MiniMessage on the test
+        // runtime classpath. Both arrive transitively with the Folia API.
+        "testImplementation"(rootProject.libs.folia.api)
         "testImplementation"(platform(rootProject.libs.junit.bom))
         "testImplementation"(rootProject.libs.junit.jupiter)
         "testImplementation"(rootProject.libs.assertj)

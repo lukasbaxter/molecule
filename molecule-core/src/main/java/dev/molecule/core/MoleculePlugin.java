@@ -5,6 +5,8 @@ import dev.molecule.api.config.ConfigService;
 import dev.molecule.api.database.DatabaseService;
 import dev.molecule.api.position.PositionService;
 import dev.molecule.api.scheduler.MoleculeScheduler;
+import dev.molecule.api.text.TextRenderer;
+import dev.molecule.api.variable.VariableRegistry;
 import dev.molecule.core.audit.DatabaseAuditService;
 import dev.molecule.core.config.DatabaseConfigService;
 import dev.molecule.core.database.CoreSchema;
@@ -15,6 +17,9 @@ import dev.molecule.core.database.migration.MigrationRunner;
 import dev.molecule.core.position.PositionListener;
 import dev.molecule.core.position.PositionTracker;
 import dev.molecule.core.scheduler.FoliaScheduler;
+import dev.molecule.core.text.MiniMessageTextRenderer;
+import dev.molecule.core.variable.CoreVariables;
+import dev.molecule.core.variable.SimpleVariableRegistry;
 import io.papermc.paper.threadedregions.RegionizedServerInitEvent;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -41,9 +46,10 @@ import org.bukkit.plugin.java.JavaPlugin;
  * {@link RegionizedServerInitEvent}.
  *
  * <p>Implemented so far: the execution bridge, position snapshots, the database pool with
- * versioned migrations, the audit log, and live configuration. The remaining Phase 1
- * infrastructure — HTTP server, REST/WebSocket API, web panel, action and variable
- * registries, resource packs — is not built yet.
+ * versioned migrations, the audit log, live configuration, the variable registry and the
+ * text engine. The remaining Phase 1
+ * infrastructure — HTTP server, REST/WebSocket API, web panel, action registry,
+ * resource packs — is not built yet.
  */
 public final class MoleculePlugin extends JavaPlugin implements Listener {
 
@@ -53,6 +59,8 @@ public final class MoleculePlugin extends JavaPlugin implements Listener {
     private HikariDatabaseService database;
     private DatabaseAuditService audit;
     private DatabaseConfigService config;
+    private SimpleVariableRegistry variables;
+    private MiniMessageTextRenderer text;
 
     /** Completes once the schema is migrated and the pool is usable, or fails if it is not. */
     private final CompletableFuture<Void> databaseReady = new CompletableFuture<>();
@@ -64,6 +72,12 @@ public final class MoleculePlugin extends JavaPlugin implements Listener {
         offThreadPool = Executors.newFixedThreadPool(workerCount(), workerFactory());
         scheduler = new FoliaScheduler(this, offThreadPool);
         positions = new PositionTracker();
+
+        // Variables and text need no database, so they are available to other plugins
+        // from enable rather than after the database connects.
+        variables = new SimpleVariableRegistry();
+        CoreVariables.registerAll(variables, positions);
+        text = new MiniMessageTextRenderer(variables);
 
         getServer().getPluginManager().registerEvents(new PositionListener(positions), this);
         getServer().getPluginManager().registerEvents(this, this);
@@ -175,6 +189,24 @@ public final class MoleculePlugin extends JavaPlugin implements Listener {
      */
     public ConfigService config() {
         return config;
+    }
+
+    /**
+     * Returns the shared variable registry (SPEC §13).
+     *
+     * @return the registry, available from enable
+     */
+    public VariableRegistry variables() {
+        return variables;
+    }
+
+    /**
+     * Returns the universal text engine (SPEC §14).
+     *
+     * @return the renderer, available from enable
+     */
+    public TextRenderer text() {
+        return text;
     }
 
     /**

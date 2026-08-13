@@ -21,6 +21,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `molecule-api`: `ConfigKey`, `ConfigService`, `AuditService` and supporting types.
 - `molecule-core`: live MariaDB-backed configuration with non-blocking reads, and an
   append-only audit log with undo, per SPEC §6 and §59.
+- `molecule-api`: `Variable`, `VariableContext`, `VariableRegistry`, `TextRenderer`.
+- `molecule-core`: the shared variable registry and the MiniMessage-backed universal
+  text engine, per SPEC §13 and §14.
 - Release pipeline with per-module note generation.
 
 Nothing has been released yet. `molecule-api` and `molecule-core` now produce real

@@ -44,8 +44,23 @@ made directly in the database or by another server sharing it are only picked up
 `reload()`. Molecule does not yet poll or subscribe for external changes. Stated
 rather than hidden, per SPEC §60's rule against faking live support.
 
-Not yet started: action and variable registries, player profile, HTTP server,
-REST/WebSocket API, authentication, web panel, resource-pack architecture.
+- `variable.SimpleVariableRegistry` — the shared variable registry (SPEC §13).
+  Variables resolve against an immutable `VariableContext` rather than a live
+  `Player`, because resolution runs on scoreboard and hologram refreshes, off the
+  server threads.
+- `text.MiniMessageTextRenderer` — the universal text engine (SPEC §14).
+  MiniMessage plus Molecule variables, reused everywhere so a gradient written for a
+  hologram behaves the same in a scoreboard or MOTD.
+
+**On variable syntax:** the spec writes `<molecule.player.name>`, but MiniMessage tag
+names match `[!?#]?[a-z0-9_-]*` and cannot contain dots. References are rewritten to
+`<molecule:'path'>` before parsing. Values are then supplied through a `TagResolver`
+as literal text, so a player named `<red>` — or one carrying a `<click:run_command>` —
+cannot inject markup into a template. Only the administrator-authored template is
+treated as markup.
+
+Not yet started: action registry, player profile, HTTP server, REST/WebSocket API,
+authentication, web panel, resource-pack architecture.
 
 ## Tests
 

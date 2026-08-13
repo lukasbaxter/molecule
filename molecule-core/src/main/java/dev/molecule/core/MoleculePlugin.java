@@ -1,8 +1,12 @@
 package dev.molecule.core;
 
+import dev.molecule.api.audit.AuditService;
+import dev.molecule.api.config.ConfigService;
 import dev.molecule.api.database.DatabaseService;
 import dev.molecule.api.position.PositionService;
 import dev.molecule.api.scheduler.MoleculeScheduler;
+import dev.molecule.core.audit.DatabaseAuditService;
+import dev.molecule.core.config.DatabaseConfigService;
 import dev.molecule.core.database.CoreSchema;
 import dev.molecule.core.database.DatabaseSettings;
 import dev.molecule.core.database.DatabaseSettingsLoader;
@@ -36,9 +40,10 @@ import org.bukkit.plugin.java.JavaPlugin;
  * {@link #onEnable()}; anything that needs a running, regionized server waits for
  * {@link RegionizedServerInitEvent}.
  *
- * <p>Implemented so far: the execution bridge and the position snapshot service. The
- * remaining Phase 1 infrastructure — database, configuration, audit log, HTTP server,
- * registries — is not built yet.
+ * <p>Implemented so far: the execution bridge, position snapshots, the database pool with
+ * versioned migrations, the audit log, and live configuration. The remaining Phase 1
+ * infrastructure — HTTP server, REST/WebSocket API, web panel, action and variable
+ * registries, resource packs — is not built yet.
  */
 public final class MoleculePlugin extends JavaPlugin implements Listener {
 
@@ -46,6 +51,8 @@ public final class MoleculePlugin extends JavaPlugin implements Listener {
     private FoliaScheduler scheduler;
     private PositionTracker positions;
     private HikariDatabaseService database;
+    private DatabaseAuditService audit;
+    private DatabaseConfigService config;
 
     /** Completes once the schema is migrated and the pool is usable, or fails if it is not. */
     private final CompletableFuture<Void> databaseReady = new CompletableFuture<>();
@@ -87,26 +94,39 @@ public final class MoleculePlugin extends JavaPlugin implements Listener {
      * confusing query at a time.
      */
     private void connectDatabase() {
-        scheduler.runOffThread(
-                () -> {
-                    try {
-                        DatabaseSettings settings =
-                                DatabaseSettingsLoader.load(getConfig().getConfigurationSection("database"));
-                        getLogger().info("Connecting to " + settings.redacted().jdbcUrl());
+        // Chained rather than joined. reload() submits its query to the same pool this
+        // runs on, so blocking here to wait for it would occupy one worker while
+        // depending on another — a deadlock once the pool is small or busy.
+        scheduler
+                .runOffThread(this::openDatabase)
+                .thenCompose(ignored -> config.reload())
+                .whenComplete(
+                        (ignored, error) -> {
+                            if (error == null) {
+                                databaseReady.complete(null);
+                                getLogger().info("Molecule Core ready.");
+                            } else {
+                                databaseReady.completeExceptionally(error);
+                                getLogger().log(Level.SEVERE, "Molecule Core could not start", error);
+                                // Disabling touches the plugin manager, which is server state.
+                                scheduler.runGlobal(
+                                        () -> getServer().getPluginManager().disablePlugin(this));
+                            }
+                        });
+    }
 
-                        database = new HikariDatabaseService(settings, offThreadPool);
-                        new MigrationRunner(database.dataSource(), getLogger())
-                                .migrate(CoreSchema.NAMESPACE, CoreSchema.migrations());
+    /** Opens the pool and brings the schema up to date. Blocking, so never on a server thread. */
+    private void openDatabase() {
+        DatabaseSettings settings =
+                DatabaseSettingsLoader.load(getConfig().getConfigurationSection("database"));
+        getLogger().info("Connecting to " + settings.redacted().jdbcUrl());
 
-                        databaseReady.complete(null);
-                        getLogger().info("Molecule Core ready.");
-                    } catch (RuntimeException e) {
-                        databaseReady.completeExceptionally(e);
-                        getLogger().log(Level.SEVERE, "Molecule Core could not start", e);
-                        // Disabling touches the plugin manager, which is server state.
-                        scheduler.runGlobal(() -> getServer().getPluginManager().disablePlugin(this));
-                    }
-                });
+        database = new HikariDatabaseService(settings, offThreadPool);
+        new MigrationRunner(database.dataSource(), getLogger())
+                .migrate(CoreSchema.NAMESPACE, CoreSchema.migrations());
+
+        audit = new DatabaseAuditService(database);
+        config = new DatabaseConfigService(database, audit, getLogger());
     }
 
     @Override
@@ -137,6 +157,24 @@ public final class MoleculePlugin extends JavaPlugin implements Listener {
      */
     public DatabaseService database() {
         return database;
+    }
+
+    /**
+     * Returns the audit log (SPEC §6).
+     *
+     * @return the service, or {@code null} until {@link #whenDatabaseReady()} completes
+     */
+    public AuditService audit() {
+        return audit;
+    }
+
+    /**
+     * Returns live configuration (SPEC §59).
+     *
+     * @return the service, or {@code null} until {@link #whenDatabaseReady()} completes
+     */
+    public ConfigService config() {
+        return config;
     }
 
     /**

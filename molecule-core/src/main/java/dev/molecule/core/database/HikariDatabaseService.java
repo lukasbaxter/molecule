@@ -92,7 +92,7 @@ public final class HikariDatabaseService implements DatabaseService, AutoCloseab
                             return results;
                         }
                     } catch (SQLException e) {
-                        throw new CompletionException(failure(namespace, sql, e), e);
+                        throw new CompletionException(failure(namespace, sql, e));
                     }
                 },
                 executor);
@@ -109,7 +109,7 @@ public final class HikariDatabaseService implements DatabaseService, AutoCloseab
                         binder.bind(statement);
                         return statement.executeUpdate();
                     } catch (SQLException e) {
-                        throw new CompletionException(failure(namespace, sql, e), e);
+                        throw new CompletionException(failure(namespace, sql, e));
                     }
                 },
                 executor);
@@ -138,8 +138,7 @@ public final class HikariDatabaseService implements DatabaseService, AutoCloseab
                         throw new CompletionException(
                                 new SQLException(
                                         "Transaction failed for " + namespace + ": " + e.getMessage(),
-                                        e),
-                                e);
+                                        e));
                     }
                 },
                 executor);
